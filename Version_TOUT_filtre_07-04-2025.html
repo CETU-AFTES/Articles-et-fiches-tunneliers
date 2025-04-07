@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Carte Leaflet - Articles & Tunneliers + Recherche</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet + clustering -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css" />
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    #map {
+      height: 100vh;
+      width: 100%;
+    }
+    .leaflet-popup-content {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .leaflet-control-zoom {
+      bottom: auto;
+      top: auto;
+      left: auto;
+      right: auto;
+    }
+    #search-container {
+      position: absolute;
+      top: 10px;
+      left: 350px;
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      z-index: 1000;
+      width: 270px;
+      max-height: 85vh;
+      overflow-y: auto;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    #filter-tunneliers {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      z-index: 1000;
+      width: 270px;
+      min-height: 500px;
+      max-height: 90vh;
+      overflow-x: auto;
+      font-family: 'Segoe UI', sans-serif;
+    }
+	
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 0.95em;
+    
+	.range-display {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9em;
+      margin-top: 5px;
+	  width: 100%;
+
+    }
+    #slider-longueur, #slider-diametre {
+      margin-top: 10px;
+      margin-bottom: 15px;
+      background: #eee;
+      border-radius: 8px;
+      height: 8px;
+    }
+	#logo-aftes, #logo-cetu {
+      position: absolute;
+      bottom: 20px;
+      z-index: 1001;
+      opacity: 0.95;
+    }
+    #logo-aftes {
+      right: 140px;
+	  height: 100px;
+    }
+    #logo-cetu {
+      right: 10px;
+	  height: 120px;
+    }
+	/* Modernisation du slider */
+    .noUi-target {
+      background: #e6e6e6;
+      border-radius: 8px;
+      height: 10px;
+      border: none;
+    }
+
+    .noUi-connect {
+      background: #f44336;
+      border-radius: 8px;
+    }
+
+    .noUi-handle {
+      background: #f44336;
+      border: 2px solid white;
+      height: 20px !important;
+      width: 20px !important;
+      border-radius: 50%;
+      top: -5px !important;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      cursor: grab;
+    }
+
+    .noUi-handle:active {
+      cursor: grabbing;
+    }
+
+    .noUi-handle:before,
+    .noUi-handle:after {
+      display: none;
+    }
+
+
+
+  </style>
+</head>
+<body>
+
+<a href="https://www.aftes.fr/fr/" target="_blank">
+  <img id="logo-aftes" src="https://raw.githubusercontent.com/CETU-AFTES/Articles-et-fiches-tunneliers/refs/heads/main/logo-asso-aftes.png" alt="AFTES logo">
+</a>
+<a href="https://www.cetu.developpement-durable.gouv.fr/spip.php?page=sommaire" target="_blank">
+  <img id="logo-cetu" src="https://raw.githubusercontent.com/CETU-AFTES/Articles-et-fiches-tunneliers/refs/heads/main/cetu_logo_rvb.png" alt="CETU logo">
+</a>
+
+<!-- Interface de filtre pour articles scientifiques -->
+<div id="search-container">
+  <strong style="color: #1e90ff;">Recherche sur les articles de la revue TES</strong><br><br>
+    <input type="text" id="search-input" placeholder="Rechercher dans le titre..." style="margin-left: -11px;width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; background-color: #f9f9f9; font-size: 0.95em;" />
+  <br><br>
+  <select id="transport-filter" style="margin-left: -11px; width: 100%; flex;padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; background-color: #f9f9f9; font-size: 0.95em; appearance: none; -webkit-appearance: none; -moz-appearance: none;">
+    <option value="">-- Tous les modes de transport --</option>
+    <select style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.95em;">
+  </select>
+  <br>
+  <button onclick="appliquerFiltres()" style="margin-left: 40px; background:#1e90ff; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; margin-top:10px;">Filtrer</button>
+  <button onclick="reinitialiserRecherche()" style="margin-left: 40px ; background:#ccc; color:#333; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; margin-left:5px;">Réinitialiser</button>
+</div>
+
+<!-- Interface de filtre pour fiches tunneliers -->
+<div id="filter-tunneliers">
+  <strong style="color: #f44336;">Recherche sur les fiches tunneliers</strong><br><br>
+  <label><input type="checkbox" id="activer-filtre-annee"> Filtrer par année de construction</label><br><br>
+  <div id="slider-annee"></div>
+  <div class="range-display">
+    <span id="annee-val">1985</span>
+  </div><br>
+  <label for="fonctionnalite-filter"style="margin-bottom: 10px; display: inline-block;">Fonctionnalité "fr - en" :</label><br>
+  <select id="fonctionnalite-filter"style="margin-bottom: 10px;margin-left: -11px; width: 100%; flex;padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; background-color: #f9f9f9; font-size: 0.95em; appearance: none; -webkit-appearance: none; -moz-appearance: none;">
+    <option value="">-- Toutes - All --</option>
+	<select style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.95em;">
+  </select><br>
+  
+  <label for="typetun-filter"style="margin-bottom: 10px; display: inline-block;">Type de tunnelier "fr - en" :</label><br>
+  <select id="typetun-filter"style="margin-bottom: 10px;margin-left: -11px; width: 100%; flex;padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; background-color: #f9f9f9; font-size: 0.95em; appearance: none; -webkit-appearance: none; -moz-appearance: none;">
+    <option value="">-- Tous - All --</option>
+	<select style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.95em;">
+  </select><br>
+
+  <label for="constructeur-filter"style="margin-bottom: 10px; display: inline-block;">Constructeur tunnelier :</label><br>
+  <select id="constructeur-filter"style="margin-bottom: 10px;margin-left: -11px; width: 100%; flex;padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; background-color: #f9f9f9; font-size: 0.95em; appearance: none; -webkit-appearance: none; -moz-appearance: none;">
+    <option value="">-- Tous - All --</option>
+	<select style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.95em;">
+  </select><br>
+  <label for="terrain-filter"style="margin-bottom: 10px; display: inline-block;">Terrains excavés "fr - en" :</label><br>
+<div id="terrain-filter" style="max-height: 100px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; margin-bottom: 5px; display: inline-block;"></div>
+  <label><input type="checkbox" id="terrain-et"> Tous les types sélectionnés (ET)</label><br><br>
+
+  <label>Diamètre (m) :</label><br>
+  <div id="slider-diametre"></div>
+  <div class="range-display" style="display: flex; justify-content: space-between;">
+    <span id="diametre-min-val" style="flex: 1; text-align: left;">2</span>
+    <span id="diametre-max-val" style="flex: 1; text-align: right;">15</span>
+  </div>
+
+  <label>Longueur (m) :</label><br>
+  <div id="slider-longueur"></div>
+    <div class="range-display" style="display: flex; justify-content: space-between;">
+    <span id="longueur-min-val" style="flex: 1; text-align: left;">100</span>
+    <span id="longueur-max-val" style="flex: 1; text-align: right;">40000</span>
+  </div>
+
+  <button onclick="filtrerTunneliers()" style="background:#f44336; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; margin-top:10px;">Filtrer</button>
+  <button onclick="reinitialiserTunneliers()" style="background:#ccc; color:#333; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; margin-left:5px;">Réinitialiser</button>
+</div>
+<!-- Carte Leaflet -->
+<div id="map"></div>
+
+<!-- Scripts -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
+
+<script>
+  const map = L.map('map', { zoomControl: false }).setView([46.8, -2.5], 6);
+  L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 19
+  }).addTo(map);
+
+  
+  const iconArticle = L.divIcon({
+    className: 'custom-icon',
+    html: `
+      <div style="position: relative; width: 15px; height: 15px;">
+        <div style="position: absolute; width: 15px; height: 15px; background: #1e90ff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); top: -12px; left: -12px; border: 2px solid white;"></div>
+        <div style="position: absolute; width: 7px; height: 7px; background: white; border-radius: 50%; top: -6px; left: -6px;"></div>
+      </div>
+    `,
+    iconSize: [18, 18]
+  });
+
+  const clusterArticles = L.markerClusterGroup({ maxClusterRadius: 10 });
+  const clusterTunneliers = L.markerClusterGroup({ maxClusterRadius: 10 });
+  const allArticleMarkers = [], allTunnelierMarkers = [];
+  const transportOptions = new Set(), fonctionnaliteOptions = new Set(), constructeurOptions = new Set(), typetunOptions = new Set(),terrainOptions = new Set();
+
+  function chargerCouche(url, groupe, couleur, stockerMarkers = false, type = '') {
+    fetch(url).then(res => res.json()).then(data => {
+      const pointsParCoord = {};
+      data.features.forEach(feature => {
+        const coords = feature.geometry?.coordinates;
+        const props = feature.properties;
+        if (!coords) return;
+        const key = coords.join(',');
+        if (!pointsParCoord[key]) pointsParCoord[key] = [];
+        pointsParCoord[key].push(props);
+      });
+
+      Object.entries(pointsParCoord).forEach(([coordStr, features]) => {
+        const [lon, lat] = coordStr.split(',').map(Number);
+        const marker = L.marker([lat, lon], {
+          icon: (type === 'tunnelier')
+          ? L.divIcon({
+              className: 'custom-icon',
+              html: `<div style="background:${couleur}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white;"></div>`,
+              iconSize: [18, 18]
+            })
+          : iconArticle
+        });
+
+        marker.allFeatures = features;
+        marker.bindPopup(features.map(f => {
+          const titre = type === 'article'
+            ? '<div style="color:#1e90ff;font-weight:bold;margin-bottom:5px;">Article revue TES</div>'
+            : '<div style="color:#f44336;font-weight:bold;margin-bottom:5px;">Fiche Tunnelier</div>';
+          return titre + Object.entries(f).map(([k, v]) => `<strong>${k}</strong> : ${v}`).join('<br>') + '<hr>';
+        }).join(''));
+        if (stockerMarkers) {
+          if (type === 'article') {
+            allArticleMarkers.push(marker);
+            features.forEach(f => f['Mode transport'] && transportOptions.add(f['Mode transport']));
+          } else if (type === 'tunnelier') {
+            allTunnelierMarkers.push(marker);
+            features.forEach(f => f['Fonctionnalité fr - en'] && fonctionnaliteOptions.add(f['Fonctionnalité fr - en']));
+			features.forEach(f => f['Constructeur tunnelier'] && constructeurOptions.add(f['Constructeur tunnelier']));
+			features.forEach(f => f['Type tunnelier fr - en'] && typetunOptions.add(f['Type tunnelier fr - en']));
+			features.forEach(f => {
+              const terrains = f['Terrains excavés fr - en']?.split('|').map(t => t.trim());
+              if (terrains) terrains.forEach(t => terrainOptions.add(t));
+            });
+          }
+        }
+        groupe.addLayer(marker);
+      });
+
+      if (type === 'article') {
+        const select = document.getElementById('transport-filter');
+        Array.from(transportOptions).sort().forEach(opt => {
+          const el = document.createElement('option');
+          el.value = opt; el.textContent = opt;
+          select.appendChild(el);
+        });
+      }
+      if (type === 'tunnelier') {
+        const select = document.getElementById('fonctionnalite-filter');
+        Array.from(fonctionnaliteOptions).sort().forEach(opt => {
+          const el = document.createElement('option');
+          el.value = opt; el.textContent = opt;
+          select.appendChild(el);
+		});
+		const selectConstructeur = document.getElementById('constructeur-filter');
+        Array.from(constructeurOptions).sort().forEach(opt => {
+          const el = document.createElement('option');
+          el.value = opt;
+          el.textContent = opt;
+          selectConstructeur.appendChild(el);
+        });
+		const selectType = document.getElementById('typetun-filter');
+        Array.from(typetunOptions).sort().forEach(opt => {
+          const el = document.createElement('option');
+          el.value = opt; el.textContent = opt;
+          selectType.appendChild(el);
+		});
+		const terrainContainer = document.getElementById('terrain-filter');
+Array.from(terrainOptions).sort().forEach(opt => {
+  const label = document.createElement('label');
+  label.style.display = 'block';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.value = opt;
+  checkbox.classList.add('terrain-option');
+  label.appendChild(checkbox);
+  label.appendChild(document.createTextNode(' ' + opt));
+  terrainContainer.appendChild(label);
+});
+      }
+    });
+  }
+
+  const urlArticles = 'https://raw.githubusercontent.com/CETU-AFTES/Articles-et-fiches-tunneliers/refs/heads/main/%40Liste_articles_TES_1974-2024_v3.geojson';
+  const urlTunneliers = 'https://raw.githubusercontent.com/CETU-AFTES/Articles-et-fiches-tunneliers/refs/heads/main/%40Liste_fiches_tunnelier_v3.geojson';
+
+  chargerCouche(urlArticles, clusterArticles, '#1e90ff', true, 'article');
+  chargerCouche(urlTunneliers, clusterTunneliers, '#f44336', true, 'tunnelier');
+
+  map.addLayer(clusterArticles);
+  map.addLayer(clusterTunneliers);
+
+  
+
+  L.Control.LegendeFusion = L.Control.extend({
+  onAdd: function () {
+    const div = L.DomUtil.create('div', 'leaflet-control leaflet-bar');
+    div.style.background = 'white';
+    div.style.padding = '10px';
+
+    div.innerHTML = `
+      <label style="display:flex;align-items:center;margin-bottom:5px;">
+        <input type="checkbox" id="toggle-articles" checked>
+        <span style="display:inline-block; position: relative; width: 24px; height: 24px; margin-left: 5px; margin-right: 0px;">
+          <span style="position: absolute; width: 15px; height: 15px; background: #1e90ff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); top: 1px; left: 0px; border: 2px solid white;"></span>
+          <span style="position: absolute; width: 7px; height: 7px; background: white; border-radius: 50%; top: 7px; left: 6px;"></span>
+        </span>
+        Articles revue TES
+      </label>
+      <label style="display:flex;align-items:center;">
+        <input type="checkbox" id="toggle-tunneliers" checked>
+        <span style="display:inline-block; width:14px; height:14px; background:#f44336; border-radius:50%; border:2px solid white; margin-left: 5px; margin-right: 5px;"></span>
+        Fiches tunneliers
+      </label>
+    `;
+
+    return div;
+  },
+  onRemove: function () {}
+});
+
+L.control.legendeFusion = function (opts) {
+  return new L.Control.LegendeFusion(opts);
+}
+
+L.control.legendeFusion({ position: 'topright' }).addTo(map);
+
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'toggle-articles') {
+    e.target.checked ? map.addLayer(clusterArticles) : map.removeLayer(clusterArticles);
+  }
+  if (e.target.id === 'toggle-tunneliers') {
+    e.target.checked ? map.addLayer(clusterTunneliers) : map.removeLayer(clusterTunneliers);
+  }
+});
+
+  function appliquerFiltres() {
+    const terme = document.getElementById('search-input').value.toLowerCase();
+    const mode = document.getElementById('transport-filter').value;
+    clusterArticles.clearLayers();
+    const filtres = allArticleMarkers.filter(marker => {
+      const filtered = marker.allFeatures.filter(f => {
+        const titre = f['Titre']?.toLowerCase() || '', m = f['Mode transport'] || '';
+        return titre.includes(terme) && (!mode || m === mode);
+      });
+      if (filtered.length > 0) {
+        marker.bindPopup(filtered.map(f => {
+        const titre = (marker.options.icon === iconArticle)
+          ? '<div style="color:#1e90ff;font-weight:bold;margin-bottom:5px;">Article revue TES</div>'
+          : '<div style="color:#f44336;font-weight:bold;margin-bottom:5px;">Fiche Tunnelier</div>';
+        return titre + Object.entries(f).map(([k, v]) => `<strong>${k}</strong> : ${v}`).join('<br>') + '<hr>';
+      }).join(''));
+        return true;
+      }
+      return false;
+    });
+    filtres.forEach(marker => clusterArticles.addLayer(marker));
+  }
+
+  function reinitialiserRecherche() {
+    document.getElementById('search-input').value = '';
+    document.getElementById('transport-filter').value = '';
+    clusterArticles.clearLayers();
+    allArticleMarkers.forEach(marker => {
+      marker.bindPopup(marker.allFeatures.map(f => {
+        const titre = (marker.options.icon === iconArticle)
+          ? '<div style="color:#1e90ff;font-weight:bold;margin-bottom:5px;">Article revue TES</div>'
+          : '<div style="color:#f44336;font-weight:bold;margin-bottom:5px;">Fiche Tunnelier</div>';
+        return titre + Object.entries(f).map(([k, v]) => `<strong>${k}</strong> : ${v}`).join('<br>') + '<hr>';
+      }).join(''));
+      clusterArticles.addLayer(marker);
+    });
+  }
+
+  function filtrerTunneliers() {
+    const fct = document.getElementById('fonctionnalite-filter').value;
+	const constructeur = document.getElementById('constructeur-filter').value;
+	const typetun = document.getElementById('typetun-filter').value;
+	const selectedTerrains = Array.from(document.querySelectorAll('.terrain-option:checked')).map(cb => cb.value);
+    const terrainModeET = document.getElementById('terrain-et').checked;
+    clusterTunneliers.clearLayers();
+    const filtres = allTunnelierMarkers.filter(marker => {
+      const filtered = marker.allFeatures.filter(f => {
+        const parseNumber = val => Number((val || '0').toString().replace(',', '.'));
+        const d = parseNumber(f['Diamètre']);
+        const l = parseNumber(f['Longueur']);
+        const debut = parseInt(f['Date de début de construction']);
+        const fin = parseInt(f['Date de fin de construction']);
+        let actif = true;
+        const filtreAnnee = document.getElementById('activer-filtre-annee')?.checked;
+        if (filtreAnnee) {
+          actif = !isNaN(debut) && !isNaN(fin) && debut <= anneeCourante && anneeCourante <= fin;
+        }
+		const terrains = (f['Terrains excavés fr - en'] || '').split('|').map(t => t.trim());
+        let terrainOK = true;
+        if (selectedTerrains.length > 0) {
+          if (terrainModeET) {
+            terrainOK = selectedTerrains.every(sel => terrains.includes(sel));
+          } else {
+            terrainOK = selectedTerrains.some(sel => terrains.includes(sel));
+          }
+        }
+        return terrainOK &&
+          actif &&
+          (!fct || f['Fonctionnalité fr - en'] === fct) &&
+          (!constructeur || f['Constructeur tunnelier'] === constructeur) &&
+          (!typetun || f['Type tunnelier fr - en'] === typetun) &&
+          d >= diametreMin && d <= diametreMax &&
+          l >= longueurMin && l <= longueurMax;
+      });
+      if (filtered.length > 0) {
+        marker.bindPopup(filtered.map(f => {
+          const titre = (marker.options.icon === iconArticle)
+            ? '<div style="color:#1e90ff;font-weight:bold;margin-bottom:5px;">Article revue TES</div>'
+            : '<div style="color:#f44336;font-weight:bold;margin-bottom:5px;">Fiche Tunnelier</div>';
+          return titre + Object.entries(f).map(([k, v]) => `<strong>${k}</strong> : ${v}`).join('<br>') + '<hr>';
+        }).join(''));
+
+        return true;
+      }
+      return false;
+    });
+    filtres.forEach(marker => clusterTunneliers.addLayer(marker));
+  }
+
+  function reinitialiserTunneliers() {
+    document.getElementById('activer-filtre-annee').checked = false;
+    document.getElementById('fonctionnalite-filter').value = '';
+	document.getElementById('constructeur-filter').value = '';
+	document.getElementById('typetun-filter').value = '';
+	document.querySelectorAll('.terrain-option').forEach(cb => cb.checked = false);
+    document.getElementById('terrain-et').checked = false;
+    sliderDiametre.noUiSlider.set([2, 15]);
+    sliderLongueur.noUiSlider.set([100, 40000]);
+    clusterTunneliers.clearLayers();
+    allTunnelierMarkers.forEach(marker => {
+      marker.bindPopup(marker.allFeatures.map(f => Object.entries(f).map(([k, v]) => `<strong>${k}</strong> : ${v}`).join('<br>') + '<hr>').join(''));
+      clusterTunneliers.addLayer(marker);
+    });
+  }
+</script>
+
+<script>
+  let longueurMin = 100, longueurMax = 40000;
+  const sliderLongueur = document.getElementById('slider-longueur');
+  noUiSlider.create(sliderLongueur, {
+    start: [100, 40000],
+    connect: true,
+    step: 100,
+    range: { 'min': 100, 'max': 40000 },
+    format: { to: value => Math.round(value), from: value => Number(value) }
+  });
+  sliderLongueur.noUiSlider.on('update', function (values) {
+    document.getElementById('longueur-min-val').innerText = values[0];
+    document.getElementById('longueur-max-val').innerText = values[1];
+    longueurMin = parseFloat(values[0]);
+    longueurMax = parseFloat(values[1]);
+  });
+
+  let anneeCourante = 1985;
+const sliderAnnee = document.getElementById('slider-annee');
+noUiSlider.create(sliderAnnee, {
+  start: [1985],
+  step: 1,
+  range: { min: 1970, max: 2030 },
+  format: {
+    to: value => Math.round(value),
+    from: value => Number(value)
+  }
+});
+sliderAnnee.noUiSlider.on('update', function (values) {
+  anneeCourante = parseInt(values[0]);
+  document.getElementById('annee-val').innerText = anneeCourante;
+});
+
+let diametreMin = 2, diametreMax = 15;
+const sliderDiametre = document.getElementById('slider-diametre');
+  noUiSlider.create(sliderDiametre, {
+    start: [2, 15],
+    connect: true,
+    step: 0.1,
+    range: { 'min': 2, 'max': 15 },
+    format: { to: value => parseFloat(value).toFixed(1), from: value => Number(value) }
+  });
+  sliderDiametre.noUiSlider.on('update', function (values) {
+    document.getElementById('diametre-min-val').innerText = values[0];
+    document.getElementById('diametre-max-val').innerText = values[1];
+    diametreMin = parseFloat(values[0]);
+    diametreMax = parseFloat(values[1]);
+  });
+</script>
+
+
+
+</body>
+</html>
